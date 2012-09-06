@@ -1,4 +1,4 @@
-# The Horror, The Horror
+# The Horror, The Horror!
 
 `null` values are terrible, awful things. Lets look at some Java code for a moment:
 
@@ -12,21 +12,21 @@ Pretty straight forward, eh? We receive `x`, then square it and return the resul
 
 This is fine and dandy until someone passes in a `null`, and everything explodes into a giant fireball of `NullPointerException`.
 
-So ... maybe can we can do some interior decoration, avoid the exception, and make it someone else's problem:
+So ... maybe can we can do some interior decoration, avoid the exception, and return a reasonable default if there happens to be a `null`:
 
 ```java
 public Double mySquare( Double x ) {
   if (x != null) {
     return Math.pow( x, 2.0 );
   } else {
-    return null;
+    return 0.0;
   }
 }
 ```
 
-At about this point, we take a sip of coffee and realize that more than half the code consists of `null` handling, and that anything calling your code also has to deal with the possibility of a returned `null` value.
+At about this point, we take a sip of coffee and realize that *more than half the code* consists of `null` handling. Ugh.
 
-That sucks, and this isn't even interesting code. Heaven forbid we have to write safe code that's significantly less contrived!
+That sucks, and this is really trivial code. Heaven forbid we have to write safe code that's significantly less contrived!
 
 Given that `null` exists, and that we have to deal with Other People's Code which may or may not give us unexpected `null` pointers, it seems reasonable that we should have a way to deal with values that may or may not be `null`.
 
@@ -47,9 +47,9 @@ Wouldn't it be cool if we could put some sort of box around might-be-null values
 So, let me just throw this out there:
 
 ```java
-public Box<Double> mySquare( Double x ) {
-  Box<Double> y = new Box( x );
-  return x.apply( new Square() );
+public Double mySquare( Double x ) {
+  Box<Double> y = new Box(x);
+  return Box.apply( new Square(), y ).or( 0.0 );
 }
 ```
 
@@ -59,23 +59,35 @@ Lets take this apart, bit by bit.
 
 First, that `Box` thing: it appears to be a generic class with a few static methods on it.
 
-Second, `new Box( x )` produces a `Box` that contains `x` -- a `Double` that might be `null`.
+Second, `new Box(x)` produces a `Box` that contains `x` -- a `Double` that might be `null`.
 
-Third, `y.apply( new Square() )` smells a bit like `Math.pow( x, 2.0 )` ... but it's operating within the `Box` and it returns a `Box` value.
+Third, `Box.apply( new Square(), y )` smells a bit like `Math.pow( x, 2.0 )`.
 
-Wait. What about `null`?
+Finally, the `.or( 0.0 )` method provides a default value, just in case `x` happens to be `null`.
 
-## `isEmpty`
+In other words: we can perform generic operations on `Box` instances without having to check for `null` values.
 
-`Box` is smart about it's operations: if it contains a `null`, the `apply()` method will simply return another empty `Box`.
+## What is `Square()`?
 
-You can manually check to see if a `Box` is empty with the `isEmpty()` method, but generally speaking that is handled for you!
+This is where things get a little odd. `Square()` does the grunt work of squaring the value inside the `Box` ... but how does it operate on `y`?
 
-In other words, we can efficiently perform a bunch of operations on `Box` classes without having to check for `null` values.
+Here's what it looks like:
 
-## Unpacking
+```java
+public class Square<Double> extends BoxApply {
+  public Double apply( Double base ) {
+    return Math.pow( base, 2.0 );
+  }
+}
+```
 
-It's cool that we can safely do operations on the values in these boxes, but what if we actually want to pass that value around to other code that isn't `Box` aware?
+The plumbing is pretty straight forward: the `BoxApply.apply()` allows you to work directly with the raw values, but *only if* the `Box` instance can supply a legitimate value. Otherwise, it's completely ignored. 
+
+This means you can write code that deals directly with the raw data, without having to worry if it's present. Note that this code can also be reused for any `Box<Double>`.
+
+## Unpacking and Default Values
+
+It's cool that we can safely do operations within the safe confines of a `Box`, but what if we actually want to pass that value around to other code that isn't `Box` aware?
 
 ```java
 Box<Double> y = new Box( x );
@@ -83,16 +95,16 @@ Box<Double> y = new Box( x );
 Double z = y.unpack();
 ```
 
-Great -- we can get the `Double` value, but at this point we're right back into the land of might-be-null values. If we're feeling safety conscious, we'll do doing something like this:
+OK -- we can get the `Double`, but we're right back into the land of might-be-null values. We'll just end up doing something like this:
 
 ```java
 Double z = y.unpack();
 if (z == null) {
-  z = 0.0;
+  z = 0.0; // safe default!
 }
 ```
 
-That way, `z` is either going to be the value of our computations, or `0.0` ... but damnit, we don't want to be in the might-be-null handling business. The `unpack()` method is *dangerous*, because we might forget to follow it up with the `null` check.
+That way, `z` is either going to be the value of our computations, or `0.0` ... but damnit, we're trying to get out of the might-be-null handling business. The `unpack()` method is *dangerous*, because we might forget to follow it up with the `null` check.
 
 This is nicer:
 
@@ -100,46 +112,70 @@ This is nicer:
 Double z = y.or( 0.0 );
 ```
 
-If `y` is a `Box` with a value, `z` will be the `Double` value ... if `y` is empty, `z` will be `0.0`.
+If `y` is a `Box` with a value, `z` will be the `Double` value ... and if `y` is empty, `z` will be `0.0`.
 
 Now, we actually have an end-to-end system for eliminating the possibility of a `NullPointerException`!
 
+This brings us back to our original suggestion:
+
 ```java
 public Double mySquare( Double x ) {
-  return new Box( x ).apply( new Square() ).or(0.0)
+  return Box.apply( new Square(), new Box(x) ).or(0.0)
 }
 ```
 
-## What is `Square()`?
 
-This is where things get a little weird. `Square()` does the grunt work of squaring the value inside the `Box` ... but how does it operate on `y`?
+## Lists?
 
-Here's what it looks like:
+That's all quite nice, but what if you want to do something like add up a list of boxed numbers?
 
 ```java
-public class Square<Double> extends BoxOp {
-  public Double apply( Double base ) {
-    return Math.pow( base, 2.0 );
-  }
+Box<Integer> x = new Box(5);
+Box<Integer> y = new Box(2);
+Box<Integer> z = new Box(9);
+Box.combine( new Add(), Arrays.toList( x, y, z ) ); // .. Box(16)
+```
+
+That's pretty cool. The implementation of `Add()` looks like this:
+
+```java
+public class Add<Integer> extends BoxCombine {
+	public Integer combine( Integer a, Integer b ) {
+		return a + b;
+	}
 }
 ```
 
-The plumbing is pretty straight forward. The `apply()` method is called by the `Box`, which supplies it's own value ... and this is guaranteed to be a real value, not a `null`, because an empty `Box` won't actually call the `apply()` method on your operation.
+Now, `combine` only takes two parameters ... how does it handle the three parameters in the example?
 
-Another method is available for changing the `Box` value. `convert(x)` handles operations that change the type of the value contained within the box (eg: `Double` to `String`).
-
-In this way, you should be able to do something like:
+Again, `Box` is pretty smart: it combines the first two parameters together (adding `x` and `y`), takes that result, and combines it with the next (and last) parameter `z`. Kind of like this:
 
 ```java
-Box.up( someNumber() ).apply( new ToString() ).or("oops!")
+a = combine( x, y )
+return combine( a, z )
 ```
+
+If you're familiar with functional programming, you'll notice that this is a *left fold* operation.
+
+What happens if one of the boxes contains a `null` value? The `Box.combine()` method ignores it completely, and continues the operation as if it weren't present! This is quite handy when dealing with big sets of data, where it's safe to discard bad data.
+
+Another fun method for lists is `Box.filter()` -- given a `BoxFilter` instance and a `List` of boxes, it will filter the list. For example:
+
+```java
+Box<Integer> x = new Box(5);
+Box<Integer> y = new Box(12);
+Box<Integer> z = new Box(3);
+
+List<Box<Integer>> noY = Box.filter( new LessThanTen(), Arrays.toList( x, y, z ) )
+```
+
+In which case, `noY` only contains boxes `x` and `z`, because `y` is greater than 10.
 
 ## Up Next
 
 Lots. Maybe. If people are interested, I'd be happy to keep hacking and taking patches. If not, consider it a simple hacking exercise. :)
 
-It might be fun to write some examples for other `null` prone languages -- C++ anyone?
-
+It might be fun to write some examples for other `null` prone languages -- C++, C#, or Objective-C, anyone?
 
 ## Running
 

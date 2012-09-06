@@ -1,5 +1,5 @@
 package schrodinger;
 
-public interface BoxOp<T> {
+public interface BoxApply<T> {
     public T apply( T v );
 }
