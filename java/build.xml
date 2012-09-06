@@ -1,0 +1,46 @@
+<project name="Schrodinger" basedir="." default="clean-build">
+
+  <property name="src.dir" value="src" />
+  <property name="build.dir" value="build" />
+  <property name="classes.dir" value="${build.dir}/classes" />
+  <property name="jar.dir" value="${build.dir}/jar" />
+  <property name="jar.path" value="${jar.dir}/${ant.project.name}.jar" />
+
+  <target name="clean">
+    <delete dir="${build.dir}" />
+    <delete>
+      <fileset defaultexcludes="no" dir="." includes="**/*~"/>
+    </delete>
+  </target>
+
+  <target name="compile">
+    <mkdir dir="${classes.dir}" />
+    <javac srcdir="${src.dir}" destdir="${classes.dir}" includeantruntime="false" />
+  </target>
+
+  <target name="jar" depends="compile">
+    <mkdir dir="${jar.dir}" />
+    <jar destfile="${jar.path}" basedir="${classes.dir}" />
+  </target>
+
+  <target name="clean-build" depends="clean,jar" />
+
+  <target name="compile-example">
+    <mkdir dir="${build.dir}/example-classes" />
+    <javac srcdir="example" destdir="${build.dir}/example-classes" includeantruntime="false">
+      <classpath>
+	<path location="${jar.path}" />
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="example" depends="clean,jar,compile-example">
+    <java classname="Example" classpath="${build.dir}/example-classes">
+      <classpath>
+	<path location="${build.dir}/example-classes" />
+	<path location="${jar.path}" />
+      </classpath>
+    </java>
+  </target>
+  
+</project>
