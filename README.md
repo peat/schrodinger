@@ -74,14 +74,14 @@ This is where things get a little odd. `Square()` does the grunt work of squarin
 Here's what it looks like:
 
 ```java
-public class Square<Double> extends BoxApply {
+public class Square<Double> extends Change {
   public Double apply( Double base ) {
     return Math.pow( base, 2.0 );
   }
 }
 ```
 
-The plumbing is pretty straight forward: the `BoxApply.apply()` allows you to work directly with the raw values, but *only if* the `Box` instance can supply a legitimate value. Otherwise, it's completely ignored. 
+The plumbing is pretty straight forward: the `Change.apply()` allows you to work directly with the raw values, but *only if* the `Box` instance can supply a legitimate value. Otherwise, it's completely ignored. 
 
 This means you can write code that deals directly with the raw data, without having to worry if it's present. Note that this code can also be reused for any `Box<Double>`.
 
@@ -133,14 +133,14 @@ That's all quite nice, but what if you want to do something like add up a list o
 Box<Integer> x = new Box(5);
 Box<Integer> y = new Box(2);
 Box<Integer> z = new Box(9);
-Box.combine( new Add(), Arrays.toList( x, y, z ) ); // .. Box(16)
+Box.apply( new Add(), Arrays.toList( x, y, z ) ); // .. Box(16)
 ```
 
 That's pretty cool. The implementation of `Add()` looks like this:
 
 ```java
-public class Add<Integer> extends BoxCombine {
-	public Integer combine( Integer a, Integer b ) {
+public class Add<Integer> extends Combine {
+	public Integer apply( Integer a, Integer b ) {
 		return a + b;
 	}
 }
@@ -151,22 +151,22 @@ Now, `combine` only takes two parameters ... how does it handle the three parame
 Again, `Box` is pretty smart: it combines the first two parameters together (adding `x` and `y`), takes that result, and combines it with the next (and last) parameter `z`. Kind of like this:
 
 ```java
-a = combine( x, y )
-return combine( a, z )
+a = apply( x, y )
+return apply( a, z )
 ```
 
 If you're familiar with functional programming, you'll notice that this is a *left fold* operation.
 
-What happens if one of the boxes contains a `null` value? The `Box.combine()` method ignores it completely, and continues the operation as if it weren't present! This is quite handy when dealing with big sets of data, where it's safe to discard bad data.
+What happens if one of the boxes contains a `null` value? The `Box.apply()` method ignores it completely, and continues the operation as if it weren't present! This is quite handy when dealing with big sets of data, where it's safe to discard bad data.
 
-Another fun method for lists is `Box.filter()` -- given a `BoxFilter` instance and a `List` of boxes, it will filter the list. For example:
+Another fun method for lists is `Box.apply()` -- given a `Filter` instance and a `List` of boxes, it will filter the list. For example:
 
 ```java
 Box<Integer> x = new Box(5);
 Box<Integer> y = new Box(12);
 Box<Integer> z = new Box(3);
 
-List<Box<Integer>> noY = Box.filter( new LessThanTen(), Arrays.toList( x, y, z ) )
+List<Box<Integer>> noY = Box.apply( new LessThanTen(), Arrays.toList( x, y, z ) )
 ```
 
 In which case, `noY` only contains boxes `x` and `z`, because `y` is greater than 10.
